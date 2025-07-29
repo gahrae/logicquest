@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logic Quest</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/tau-prolog"></script>
+    <style>
+        /* Custom styles for better readability and layout */
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent body scroll, sections will scroll if needed */
+            background: linear-gradient(to right bottom, #e0f2f7, #d4eaf5); /* Subtle gradient background */
+            color: #333; /* Default text color */
+        }
+        textarea {
+            resize: vertical; /* Allow vertical resizing of text areas */
+            min-height: 100px; /* Minimum height for textareas */
+            line-height: 1.6; /* Slightly increased line-height for better readability */
+            font-size: 0.95rem; /* Slightly smaller font for textareas */
+        }
+
+        /* Custom scrollbar styles */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #a7d9ed; /* Lighter blue */
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #7cccef; /* Slightly darker blue on hover */
+        }
+
+        /* Style for the message box */
+        #messageBox {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #4CAF50; /* Green */
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+            z-index: 1000;
+            display: none; /* Hidden by default */
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+            font-weight: 600;
+        }
+        #messageBox.show {
+            display: block;
+            opacity: 1;
+            transform: translateX(-50%) translateY(0); /* Animate slide-in */
+        }
+
+        /* Styles for annotated text */
+        .annotated-text {
+            cursor: pointer;
+            background-color: #e0f7fa; /* Light blue background for annotated text */
+            border-bottom: 1px dashed #00bcd4; /* Dashed underline */
+            padding: 1px 2px;
+            border-radius: 3px;
+        }
+        .annotated-text:hover {
+            background-color: #b2ebf2; /* Darker blue on hover */
+        }
+
+        /* Resizer styles */
+        #resizer {
+            width: 8px; /* Fixed width for the draggable area */
+            background-color: #a7d9ed; /* Lighter blue, matches scrollbar thumb */
+            cursor: ew-resize; /* East-West resize cursor */
+            flex-shrink: 0; /* Prevent it from shrinking */
+            z-index: 10; /* Ensure it's above other content */
+            border-left: 1px solid #e2e8f0; /* light border */
+            border-right: 1px solid #e2e8f0; /* light border */
+        }
+        #resizer:hover {
+            background-color: #7cccef; /* Slightly darker on hover */
+        }
+    </style>
+</head>
+<body class="text-gray-800 h-screen flex flex-col">
+
+    <div id="messageBox" class="rounded-lg"></div>
+
+    <!-- Annotation Pop-up -->
+    <div id="annotationPopup" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-xl z-50 hidden border border-blue-200">
+        <h3 id="popupTitle" class="text-xl font-semibold mb-4 text-blue-800">Link Prolog Fact</h3>
+        <p class="text-sm text-gray-600 mb-2">Selected Text: "<span id="selectedTextDisplay" class="font-bold text-blue-700"></span>"</p>
+        <!-- Changed from input to textarea for multi-line support -->
+        <textarea id="prologFactInput" placeholder="e.g., hero(superman)." class="w-full p-2 border border-blue-300 rounded-md mb-4 focus:outline-none focus:ring-2 focus:ring-blue-400"></textarea>
+        <div class="flex justify-end gap-2">
+            <button id="cancelAnnotationBtn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition transform hover:scale-105 active:scale-100">Cancel</button>
+            <button id="removeAnnotationBtn" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition transform hover:scale-105 active:scale-100 hidden">Remove Annotation</button>
+            <button id="linkPrologBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition transform hover:scale-105 active:scale-100">Link Prolog</button>
+        </div>
+    </div>
+
+    <!-- Hover Menu (now only for preview) -->
+    <div id="hoverMenu" class="absolute bg-blue-700 text-white text-xs p-2 rounded-md shadow-lg hidden z-50">
+        <span id="hoverPrologFact" class="block font-semibold"></span>
+    </div>
+
+    <div class="flex flex-1 overflow-hidden p-6 gap-6">
+        <!-- Left Section (Story Editor) -->
+        <div id="left-panel" class="flex flex-col p-6 bg-white rounded-xl shadow-xl border border-blue-100 transition-all duration-300 ease-in-out hover:shadow-2xl" style="flex-basis: 70%;">
+            <!-- Story Title (now editable) -->
+            <div id="storyTitle" contenteditable="true" class="text-3xl font-bold mb-6 text-center text-blue-800 font-['Playfair_Display'] cursor-text">Story</div>
+            
+            <!-- Mode Toggle & File Buttons for Story Editor -->
+            <div class="flex justify-center gap-4 mb-4">
+                <button id="toggleStoryModeBtn"
+                        class="px-6 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-3 focus:ring-blue-400 focus:ring-offset-2 transition transform hover:scale-105 active:scale-100">
+                    Switch to Creator Mode
+                </button>
+                <button id="downloadStoryBtn"
+                        class="px-6 py-2 bg-purple-500 text-white font-semibold rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-3 focus:ring-purple-400 focus:ring-offset-2 transition transform hover:scale-105 active:scale-100">
+                    Download Story
+                </button>
+                <input type="file" id="loadStoryInput" accept=".story, .txt" class="hidden">
+                <button id="loadStoryBtn"
+                        class="px-6 py-2 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-3 focus:ring-green-400 focus:ring-offset-2 transition transform hover:scale-105 active:scale-100">
+                    Load Story
+                </button>
+            </div>
+
+            <!-- Story Content Div (now contenteditable) -->
+            <div id="storyContent"
+                 contenteditable="false"
+                 class="w-full flex-1 p-4 border border-blue-200 rounded-lg focus:outline-none focus:ring-3 focus:ring-blue-300 bg-blue-50 text-gray-800 placeholder-gray-500 shadow-inner resize-y overflow-y-auto">
+            </div>
+        </div>
+
+        <!-- Resizer Bar -->
+        <div id="resizer"></div>
+
+        <!-- Right Section (Prolog Logic & Query) -->
+        <div id="right-panel" class="flex flex-col p-6 bg-white rounded-xl shadow-xl border border-purple-100 transition-all duration-300 ease-in-out hover:shadow-2xl" style="flex-basis: 30%;">
+            <h2 class="text-3xl font-bold mb-6 text-center text-purple-800 font-['Playfair_Display']">Prolog</h2>
+            
+            <div class="flex flex-col mb-6">
+                <h3 class="text-xl font-semibold mb-3 text-purple-700">Knowledge Base:</h3>
+                <textarea id="prologProgram"
+                          class="w-full h-64 p-4 border border-purple-200 rounded-lg focus:outline-none focus:ring-3 focus:ring-purple-300 bg-purple-50 text-gray-800 font-mono placeholder-gray-500 shadow-inner resize-y overflow-y-auto"
+                          placeholder="Write your Prolog program here..."></textarea>
+                <button id="loadProgramBtn"
+                        class="mt-4 px-8 py-3 bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl focus:outline-none focus:ring-3 focus:ring-purple-400 focus:ring-offset-2 transition transform hover:scale-105 active:scale-100">
+                    Load Program
+                </button>
+            </div>
+
+            <div class="flex flex-col flex-1">
+                <h3 class="text-xl font-semibold mb-3 text-purple-700">Query:</h3>
+                <textarea id="prologQuery"
+                          class="w-full flex-1 p-4 border border-purple-200 rounded-lg focus:outline-none focus:ring-3 focus:ring-purple-300 bg-purple-50 text-gray-800 font-mono placeholder-gray-500 shadow-inner mb-4 resize-y overflow-y-auto"
+                          placeholder="Write your Prolog query here..."></textarea>
+                <button id="runQueryBtn"
+                        class="px-8 py-3 bg-gradient-to-r from-purple-500 to-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl focus:outline-none focus:ring-3 focus:ring-purple-400 focus:ring-offset-2 transition transform hover:scale-105 active:scale-100 mb-4">
+                    Run Query
+                </button>
+                <div class="flex-1 border border-gray-300 rounded-lg p-4 bg-gray-50 overflow-y-auto text-gray-700 font-mono shadow-inner min-h-16">
+                    <pre id="queryResult" class="whitespace-pre-wrap text-sm"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global Tau Prolog session
+        let session = pl.create();
+
+        // Get DOM elements
+        const storyTitleDiv = document.getElementById('storyTitle'); // New element for editable title
+        const storyContentDiv = document.getElementById('storyContent');
+        const prologProgramTextarea = document.getElementById('prologProgram');
+        const prologQueryTextarea = document.getElementById('prologQuery');
+        const queryResultPre = document.getElementById('queryResult');
+        const loadProgramBtn = document.getElementById('loadProgramBtn');
+        const runQueryBtn = document.getElementById('runQueryBtn');
+        const messageBox = document.getElementById('messageBox');
+
+        // New elements for annotation and hover functionality
+        const toggleStoryModeBtn = document.getElementById('toggleStoryModeBtn');
+        const annotationPopup = document.getElementById('annotationPopup');
+        const popupTitle = document.getElementById('popupTitle'); // New element for popup title
+        const prologFactInput = document.getElementById('prologFactInput');
+        const selectedTextDisplay = document.getElementById('selectedTextDisplay');
+        const cancelAnnotationBtn = document.getElementById('cancelAnnotationBtn');
+        const linkPrologBtn = document.getElementById('linkPrologBtn'); // This button will be reused for 'Save Changes'
+        const removeAnnotationBtn = document.getElementById('removeAnnotationBtn'); // New button for removing
+        const hoverMenu = document.getElementById('hoverMenu');
+        const hoverPrologFactSpan = document.getElementById('hoverPrologFact');
+        
+        // New elements for story file operations
+        const downloadStoryBtn = document.getElementById('downloadStoryBtn');
+        const loadStoryBtn = document.getElementById('loadStoryBtn');
+        const loadStoryInput = document.getElementById('loadStoryInput');
+
+        // New elements for resizer
+        const leftPanel = document.getElementById('left-panel');
+        const rightPanel = document.getElementById('right-panel');
+        const resizer = document.getElementById('resizer');
+        const body = document.body;
+
+
+        let isCreatorMode = true; // Initial mode is Creator Mode
+        let currentRange = null; // To store the selected text range for NEW annotation
+        let editingAnnotatedSpan = null; // To store the span element being EDITED/REMOVED
+        let hoverMenuTimeout; // To manage the timeout for hiding the hover menu
+
+        // Resizer variables
+        let isResizing = false;
+        const MIN_WIDTH_PERCENT = 20; // Minimum width for each panel as a percentage
+
+        // Store the initial story content and title from the HTML
+        // These will now be empty by default as per the request
+        const initialStoryContent = ""; // Set to empty string
+        const initialStoryTitle = "Story";
+
+
+        /**
+         * Displays a temporary message in a styled box.
+         * @param {string} message - The message to display.
+         * @param {string} type - 'success', 'error', or 'info' to determine background color.
+         */
+        function showMessage(message, type = 'success') {
+            messageBox.textContent = message;
+            // Remove previous type classes and reset transform for animation
+            messageBox.className = 'rounded-lg'; // Reset classes
+            if (type === 'success') {
+                messageBox.style.backgroundColor = '#4CAF50'; // Green
+            } else if (type === 'error') {
+                messageBox.style.backgroundColor = '#f44336'; // Red
+            } else if (type === 'info') {
+                messageBox.style.backgroundColor = '#2196F3'; // Blue
+            }
+            // Trigger reflow to ensure animation plays
+            void messageBox.offsetWidth;
+            messageBox.classList.add('show');
+
+            setTimeout(() => {
+                messageBox.classList.remove('show'); // Hide by removing 'show'
+            }, 3000); // Message disappears after 3 seconds
+        }
+
+        /**
+         * Loads the Prolog program from the textarea into the Tau Prolog session.
+         */
+        function loadPrologProgram() {
+            let program = prologProgramTextarea.value.trim();
+
+            if (!program) {
+                session = pl.create();
+                showMessage("Prolog program cleared.", "info");
+                return;
+            }
+
+            // Workaround for Tau Prolog's single-line parsing quirk:
+            // If the program is a single non-empty line, prepend a newline to make it multi-line.
+            // This often prevents misinterpretation as a file/URL.
+            const lines = program.split('\n').filter(line => line.trim() !== '');
+            if (lines.length === 1) { // Simplified condition: if there's exactly one non-empty line
+                program = '\n' + program;
+                console.log("Workaround applied: Prepended newline to single-line Prolog program.");
+            }
+
+
+            session = pl.create();
+            try {
+                session.consult(program, {
+                    success: function() {
+                        showMessage("Prolog program loaded successfully!", "success");
+                    },
+                    error: function(err) {
+                        let errorMessage = "Unknown error loading program.";
+
+                        // Check for the specific XMLHttpRequest invalid URL error
+                        if (err && err.message && err.message.includes("Failed to execute 'open' on 'XMLHttpRequest': Invalid URL")) {
+                             errorMessage = "Error loading program: The input was misinterpreted as an invalid file or URL. This often happens with single-line inputs that resemble paths. Please ensure your Prolog rules are syntactically correct and do not accidentally resemble file paths (e.g., 'file.pl') or URLs (e.g., 'http://example.com'). If this persists, try adding a blank line or a comment at the beginning of your program.";
+                        } else if (typeof err === 'boolean' && err === true) {
+                            errorMessage = "Syntax error in Prolog rules. Please check your program for typos or incorrect syntax.";
+                        } else if (err && typeof err === 'object' && err.id) {
+                            errorMessage = "Error loading program: " + pl.format_answer(err);
+                        } else if (typeof err === 'string') {
+                            errorMessage = "Error loading program: " + err;
+                        } else {
+                            errorMessage = "An unexpected error occurred while loading the Prolog program. Details: " + (err ? JSON.stringify(err) : "No specific error details.");
+                        }
+                        showMessage(errorMessage, "error");
+                        console.error("Error loading program:", err);
+                    }
+                });
+            } catch (e) {
+                showMessage("A critical JavaScript error occurred before Prolog parsing: " + e.message, "error");
+                console.error("Critical JS error:", e);
+            }
+        }
+
+        /**
+         * Runs the Prolog query from the textarea and displays the results.
+         */
+        function runPrologQuery() {
+            // Ensure the program is loaded before running the query
+            loadPrologProgram(); 
+
+            const query = prologQueryTextarea.value;
+            queryResultPre.textContent = "Running query..."; // Clear previous results and show loading
+            if (!query.trim()) {
+                showMessage("Please enter a query.", "info");
+                queryResultPre.textContent = "No query entered.";
+                return;
+            }
+
+            try {
+                session.query(query, {
+                    success: function() {
+                        let results = [];
+
+                        const getAnswers = () => {
+                            session.answer({
+                                success: function(answer) {
+                                    if (answer === false) { // No more answers
+                                        displayResults(results);
+                                    } else {
+                                        results.push(pl.format_answer(answer));
+                                        getAnswers(); // Recursively call to get the next answer
+                                    }
+                                },
+                                error: function(err) {
+                                    showMessage("Error running query: " + pl.format_answer(err), "error");
+                                    console.error("Error running query:", err);
+                                    queryResultPre.textContent = "Error: " + pl.format_answer(err);
+                                },
+                                fail: function() {
+                                    displayResults(results); // No solutions found
+                                },
+                                limit: function() {
+                                    results.push("Query limit reached.");
+                                    displayResults(results);
+                                }
+                            });
+                        };
+
+                        getAnswers(); // Start getting answers
+
+                        function displayResults(res) {
+                            if (res.length === 0) {
+                                queryResultPre.textContent = "No solutions found.";
+                            } else {
+                                queryResultPre.textContent = res.join('\n');
+                            }
+                            showMessage("Query executed.", "success");
+                        }
+                    },
+                    error: function(err) {
+                        showMessage("Error parsing query: " + pl.format_answer(err), "error");
+                        console.error("Error parsing query:", err);
+                        queryResultPre.textContent = "Error: " + pl.format_answer(err);
+                    }
+                });
+            } catch (e) {
+                showMessage("Syntax error in query: " + e.message, "error");
+                console.error("Syntax error:", e);
+                queryResultPre.textContent = "Syntax Error: " + e.message;
+            }
+        }
+
+        /**
+         * Toggles between Creator Mode and Reader Mode for the story editor.
+         */
+        function toggleStoryMode() {
+            isCreatorMode = !isCreatorMode;
+            storyContentDiv.contentEditable = isCreatorMode;
+            if (isCreatorMode) {
+                toggleStoryModeBtn.textContent = "Switch to Reader Mode";
+                toggleStoryModeBtn.classList.remove('bg-blue-500');
+                toggleStoryModeBtn.classList.add('bg-green-500');
+                storyContentDiv.classList.remove('bg-blue-50'); // Change background for Creator Mode
+                storyContentDiv.classList.add('bg-white');
+                showMessage("Switched to Creator Mode. Select text to link Prolog facts or click existing annotations to edit/remove.", "info");
+            } else {
+                toggleStoryModeBtn.textContent = "Switch to Creator Mode";
+                toggleStoryModeBtn.classList.remove('bg-green-500');
+                toggleStoryModeBtn.classList.add('bg-blue-500');
+                storyContentDiv.classList.remove('bg-white'); // Change background for Reader Mode
+                storyContentDiv.classList.add('bg-blue-50');
+                showMessage("Switched to Reader Mode. Hover over highlighted text to see Prolog facts, click to add to rules.", "info");
+            }
+            // Hide popup and clear states when mode changes
+            annotationPopup.style.display = 'none';
+            currentRange = null;
+            editingAnnotatedSpan = null;
+        }
+
+        /**
+         * Handles text selection in Creator Mode to show the annotation pop-up for NEW annotations.
+         */
+        function handleStorySelection() {
+            if (!isCreatorMode) return; // Only active in Creator Mode
+
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                if (storyContentDiv.contains(range.commonAncestorContainer)) {
+                    const selectedText = range.toString().trim();
+                    // Only show popup for new selection if no existing span is being edited
+                    if (selectedText.length > 0 && !editingAnnotatedSpan) {
+                        currentRange = range; // Store the range for new annotation
+                        selectedTextDisplay.textContent = selectedText;
+                        prologFactInput.value = ""; // Clear previous input
+                        popupTitle.textContent = "Link Prolog Fact"; // Set title for new link
+                        linkPrologBtn.textContent = "Link Prolog"; // Set button text for new link
+                        linkPrologBtn.classList.remove('bg-orange-600'); // Ensure it's blue for new link
+                        linkPrologBtn.classList.add('bg-blue-600');
+                        removeAnnotationBtn.classList.add('hidden'); // Hide remove button for new link
+                        annotationPopup.style.display = 'block';
+
+                        // Position popup near selection (optional, but good UX)
+                        const rect = range.getBoundingClientRect();
+                        let popupX = rect.left + window.scrollX + (rect.width / 2) - (annotationPopup.offsetWidth / 2);
+                        let popupY = rect.bottom + window.scrollY + 10;
+
+                        // Get viewport dimensions
+                        const viewportWidth = window.innerWidth;
+                        const viewportHeight = window.innerHeight;
+                        const popupWidth = annotationPopup.offsetWidth;
+                        const popupHeight = annotationPopup.offsetHeight;
+                        const padding = 10; // Small padding from the edge
+
+                        // Adjust X position
+                        if (popupX + popupWidth > viewportWidth - padding) {
+                            popupX = viewportWidth - popupWidth - padding;
+                        }
+                        if (popupX < padding) {
+                            popupX = padding;
+                        }
+
+                        // Adjust Y position
+                        if (popupY + popupHeight > viewportHeight - padding) {
+                            // If it goes off the bottom, try to place it above the selection
+                            popupY = rect.top + window.scrollY - popupHeight - padding;
+                            // If it still goes off the top, place it at the top with padding
+                            if (popupY < padding) {
+                                popupY = padding;
+                            }
+                        }
+                        if (popupY < padding) {
+                            popupY = padding;
+                        }
+
+
+                        annotationPopup.style.left = `${popupX}px`;
+                        annotationPopup.style.top = `${popupY}px`;
+                        annotationPopup.style.transform = 'none'; // Override -translate-x-1/2 -translate-y-1/2
+                    } else if (selectedText.length === 0) {
+                        // If selection is cleared, hide popup unless we are editing an existing span
+                        if (!editingAnnotatedSpan) {
+                            annotationPopup.style.display = 'none';
+                        }
+                    }
+                }
+            } else {
+                // If no selection, hide popup unless we are editing an existing span
+                if (!editingAnnotatedSpan) {
+                    annotationPopup.style.display = 'none';
+                }
+            }
+        }
+
+        /**
+         * Links new text with a Prolog fact or updates an existing one.
+         */
+        function linkPrologFact() {
+            const prologFact = prologFactInput.value.trim();
+            if (!prologFact) {
+                showMessage("Please enter a Prolog fact.", "error");
+                return;
+            }
+
+            if (editingAnnotatedSpan) {
+                // Editing an existing annotation
+                editingAnnotatedSpan.setAttribute('data-prolog-fact', prologFact);
+                showMessage("Prolog fact updated successfully!", "success");
+            } else if (currentRange) {
+                // Creating a new annotation
+                const span = document.createElement('span');
+                span.className = 'annotated-text';
+                span.setAttribute('data-prolog-fact', prologFact);
+
+                try {
+                    currentRange.surroundContents(span);
+                    showMessage("Prolog fact linked successfully!", "success");
+                } catch (e) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.appendChild(currentRange.extractContents());
+                    span.innerHTML = tempDiv.innerHTML;
+                    currentRange.insertNode(span);
+                    showMessage("Prolog fact linked (partial success, consider re-selecting if issues occur).", "info");
+                    console.warn("Could not use surroundContents, used insertNode fallback:", e);
+                }
+            } else {
+                showMessage("No text selected or annotation being edited.", "error");
+                return;
+            }
+
+            annotationPopup.style.display = 'none';
+            currentRange = null; // Clear the stored range for new annotations
+            editingAnnotatedSpan = null; // Clear the stored span for editing
+            window.getSelection().removeAllRanges(); // Deselect text
+        }
+
+        /**
+         * Removes the currently edited annotation.
+         */
+        function removeAnnotation() {
+            if (editingAnnotatedSpan) {
+                // Replace the span with its inner HTML, effectively removing the span tag
+                const parent = editingAnnotatedSpan.parentNode;
+                while (editingAnnotatedSpan.firstChild) {
+                    parent.insertBefore(editingAnnotatedSpan.firstChild, editingAnnotatedSpan);
+                }
+                parent.removeChild(editingAnnotatedSpan);
+                showMessage("Annotation removed successfully!", "success");
+            } else {
+                showMessage("No annotation selected for removal.", "error");
+            }
+            annotationPopup.style.display = 'none';
+            currentRange = null;
+            editingAnnotatedSpan = null;
+            window.getSelection().removeAllRanges(); // Deselect text
+        }
+
+        /**
+         * Hides the annotation pop-up and resets states.
+         */
+        function cancelAnnotation() {
+            annotationPopup.style.display = 'none';
+            currentRange = null; // Clear the stored range
+            editingAnnotatedSpan = null; // Clear the stored span
+            window.getSelection().removeAllRanges(); // Deselect text
+        }
+
+        /**
+         * Handles mouseover event on story content to show hover menu for annotated text.
+         */
+        function handleStoryMouseOver(event) {
+            // Clear any existing timeout to prevent the menu from hiding
+            clearTimeout(hoverMenuTimeout);
+
+            const target = event.target;
+            if (target.classList.contains('annotated-text')) {
+                const prologFact = target.getAttribute('data-prolog-fact');
+                if (prologFact) {
+                    hoverPrologFactSpan.textContent = `Prolog: ${prologFact}`;
+                    
+                    // Position the hover menu
+                    const rect = target.getBoundingClientRect();
+                    hoverMenu.style.left = `${rect.left + window.scrollX}px`;
+                    hoverMenu.style.top = `${rect.bottom + window.scrollY + 5}px`;
+                    hoverMenu.style.display = 'block';
+                }
+            } else {
+                // If moving off an annotated text, schedule hiding the menu
+                // but only if the mouse is not moving into the hoverMenu itself
+                if (!hoverMenu.contains(event.relatedTarget)) {
+                    hoverMenuTimeout = setTimeout(() => {
+                        hoverMenu.style.display = 'none';
+                    }, 100); // Small delay (e.g., 100ms)
+                }
+            }
+        }
+
+        /**
+         * Handles mouseout event to hide the hover menu with a delay.
+         */
+        function handleStoryMouseOut(event) {
+            // Schedule hiding the menu, but allow time for the mouse to enter the menu
+            hoverMenuTimeout = setTimeout(() => {
+                // Only hide if the mouse is not over the hoverMenu or an annotated-text span
+                if (!hoverMenu.contains(event.relatedTarget) && !event.target.classList.contains('annotated-text')) {
+                    hoverMenu.style.display = 'none';
+                }
+            }, 100); // Small delay
+        }
+
+        /**
+         * Keep hover menu visible if mouse enters it.
+         */
+        function handleHoverMenuMouseOver() {
+            clearTimeout(hoverMenuTimeout); // Clear timeout if mouse enters the menu
+            hoverMenu.style.display = 'block'; // Ensure it's visible
+        }
+
+        /**
+         * Hide hover menu when mouse leaves it.
+         */
+        function handleHoverMenuMouseOut() {
+            hoverMenuTimeout = setTimeout(() => {
+                hoverMenu.style.display = 'none';
+            }, 100); // Small delay
+        }
+
+        /**
+         * Inserts text into a textarea at the current cursor position.
+         * @param {HTMLTextAreaElement} textarea - The textarea element.
+         * @param {string} text - The text to insert.
+         */
+        function insertTextAtCursor(textarea, text) {
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const value = textarea.value;
+
+            textarea.value = value.substring(0, start) + text + value.substring(end);
+            textarea.selectionStart = textarea.selectionEnd = start + text.length;
+            textarea.focus(); // Keep focus on the textarea
+        }
+
+        /**
+         * Handles click on annotated text to add Prolog fact to rules (Reader Mode)
+         * or edit/remove (Creator Mode).
+         */
+        function handleAnnotatedTextClick(event) {
+            const target = event.target;
+            if (target.classList.contains('annotated-text')) {
+                const fact = target.getAttribute('data-prolog-fact');
+
+                if (isCreatorMode) {
+                    // In Creator Mode, clicking an annotated text opens the edit/remove popup
+                    editingAnnotatedSpan = target; // Store reference to the span being edited
+                    selectedTextDisplay.textContent = target.textContent;
+                    prologFactInput.value = fact;
+                    popupTitle.textContent = "Edit/Remove Prolog Fact";
+                    linkPrologBtn.textContent = "Save Changes";
+                    linkPrologBtn.classList.remove('bg-blue-600'); // Change color for edit mode
+                    linkPrologBtn.classList.add('bg-orange-600');
+                    removeAnnotationBtn.classList.remove('hidden'); // Show remove button
+                    annotationPopup.style.display = 'block';
+
+                    // Position popup near the clicked element
+                    const rect = target.getBoundingClientRect();
+                    let popupX = rect.left + window.scrollX + (rect.width / 2) - (annotationPopup.offsetWidth / 2);
+                    let popupY = rect.bottom + window.scrollY + 10;
+
+                    // Get viewport dimensions
+                    const viewportWidth = window.innerWidth;
+                    const viewportHeight = window.innerHeight;
+                    const popupWidth = annotationPopup.offsetWidth;
+                    const popupHeight = annotationPopup.offsetHeight;
+                    const padding = 10; // Small padding from the edge
+
+                    // Adjust X position
+                    if (popupX + popupWidth > viewportWidth - padding) {
+                        popupX = viewportWidth - popupWidth - padding;
+                    }
+                    if (popupX < padding) {
+                        popupX = padding;
+                    }
+
+                    // Adjust Y position
+                    if (popupY + popupHeight > viewportHeight - padding) {
+                        // If it goes off the bottom, try to place it above the selection
+                        popupY = rect.top + window.scrollY - popupHeight - padding;
+                        // If it still goes off the top, place it at the top with padding
+                        if (popupY < padding) {
+                            popupY = padding;
+                        }
+                    }
+                    if (popupY < padding) {
+                        popupY = padding;
+                    }
+
+                    annotationPopup.style.left = `${popupX}px`;
+                    annotationPopup.style.top = `${popupY}px`;
+                    annotationPopup.style.transform = 'none'; // Override -translate-x-1/2 -translate-y-1/2
+                    
+                    // Prevent text selection from triggering the normal selection handler
+                    event.stopPropagation(); 
+                    window.getSelection().removeAllRanges(); // Clear any accidental selection
+                } else {
+                    // In Reader Mode, clicking adds the fact to the Prolog rules
+                    if (fact) {
+                        const currentProgram = prologProgramTextarea.value; // Get current value
+                        const factWithNewline = `${fact}\n`; // Add a newline for better formatting
+
+                        if (currentProgram.includes(fact)) {
+                            // If fact exists, focus and move cursor to the start of the line containing the fact
+                            prologProgramTextarea.focus();
+                            const startIndex = currentProgram.indexOf(fact);
+                            
+                            // Find the start of the line where the fact is located
+                            const textBeforeFact = currentProgram.substring(0, startIndex);
+                            const lastNewlineIndex = textBeforeFact.lastIndexOf('\n');
+                            const lineStartIndex = (lastNewlineIndex === -1) ? 0 : lastNewlineIndex + 1;
+
+                            prologProgramTextarea.setSelectionRange(lineStartIndex, lineStartIndex); // Place cursor at the start of the line
+                            
+                            // Scroll to the line
+                            const lineHeight = parseInt(getComputedStyle(prologProgramTextarea).lineHeight);
+                            const lines = currentProgram.substring(0, lineStartIndex).split('\n').length -1;
+                            prologProgramTextarea.scrollTop = lines * lineHeight;
+
+                            showMessage(`"${fact}" is already in Prolog rules (cursor moved to start of line).`, "info");
+                        } else {
+                            insertTextAtCursor(prologProgramTextarea, factWithNewline);
+                            showMessage(`Added "${fact}" to Prolog rules.`, "success");
+                        }
+                        hoverMenu.style.display = 'none'; // Hide menu after action
+                    }
+                }
+            }
+        }
+
+        /**
+         * Downloads the current story content as a .story file.
+         */
+        function downloadStory() {
+            // Include title, content, program rules, query, and version in the download
+            const storyData = {
+                version: "1.0", // Add file format version
+                title: storyTitleDiv.textContent.trim(),
+                content: storyContentDiv.innerHTML, // Get innerHTML to preserve annotations
+                programRules: prologProgramTextarea.value, // Include Prolog program rules
+                prologQuery: prologQueryTextarea.value // Include Prolog query
+            };
+            const blob = new Blob([JSON.stringify(storyData, null, 2)], { type: 'application/json;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${storyTitleDiv.textContent.trim().replace(/\s+/g, '_').toLowerCase() || 'my_enchanted_story'}.story`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showMessage("Story downloaded successfully!", "success");
+        }
+
+        /**
+         * Loads a story from a selected file or Gist link into the story editor.
+         */
+        function loadStory() {
+            // Create a temporary modal for selection
+            const loadOptionsModal = document.createElement('div');
+            loadOptionsModal.id = 'loadOptionsModal';
+            loadOptionsModal.className = 'fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-[1001]';
+            loadOptionsModal.innerHTML = `
+                <div class="bg-white p-8 rounded-lg shadow-xl w-96">
+                    <h3 class="text-xl font-semibold mb-6 text-blue-800 text-center">Load Story From:</h3>
+                    <div class="flex flex-col gap-4">
+                        <button id="loadFromFileBtn" class="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition transform hover:scale-105 active:scale-100">Local File</button>
+                        <button id="showGistInputBtn" class="px-6 py-3 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition transform hover:scale-105 active:scale-100">Gist Link</button>
+                        <div id="gistInputContainer" class="hidden flex flex-col gap-3 mt-4">
+                            <input type="text" id="gistUrlInput" placeholder="Enter Gist URL (e.g., https://gist.github.com/user/id)" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-400">
+                            <button id="loadGistFromUrlBtn" class="px-6 py-3 bg-purple-700 text-white rounded-md hover:bg-purple-800 transition transform hover:scale-105 active:scale-100">Load Gist</button>
+                        </div>
+                        <button id="cancelLoadOptionsBtn" class="px-6 py-3 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition transform hover:scale-105 active:scale-100">Cancel</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(loadOptionsModal);
+
+            // Event listeners for the modal buttons
+            document.getElementById('loadFromFileBtn').addEventListener('click', () => {
+                loadOptionsModal.remove();
+                loadStoryInput.click(); // Trigger the hidden file input click
+            });
+
+            document.getElementById('showGistInputBtn').addEventListener('click', () => {
+                document.getElementById('gistInputContainer').classList.remove('hidden');
+                document.getElementById('showGistInputBtn').classList.add('hidden'); // Hide this button after showing input
+                const gistUrlInput = document.getElementById('gistUrlInput');
+                gistUrlInput.focus(); // Focus on the gistUrlInput field
+
+                // Add event listener for 'keydown' on gistUrlInput
+                gistUrlInput.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault(); // Prevent default Enter key behavior (e.g., new line in some contexts)
+                        document.getElementById('loadGistFromUrlBtn').click(); // Programmatically click the Load Gist button
+                    }
+                });
+            });
+
+            document.getElementById('loadGistFromUrlBtn').addEventListener('click', () => {
+                const gistUrl = document.getElementById('gistUrlInput').value;
+                loadOptionsModal.remove();
+                loadStoryFromGist(gistUrl);
+            });
+
+            document.getElementById('cancelLoadOptionsBtn').addEventListener('click', () => {
+                loadOptionsModal.remove();
+            });
+        }
+
+        /**
+         * Handles the file selection for loading a story from a local file.
+         */
+        function handleStoryFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const storyData = JSON.parse(e.target.result);
+                        // Version check (optional, but good for future compatibility)
+                        const version = storyData.version || "N/A";
+                        console.log(`Loading story file version: ${version}`);
+
+                        storyTitleDiv.textContent = storyData.title || "Story";
+                        storyContentDiv.innerHTML = storyData.content; // Set innerHTML to preserve any existing span tags for annotations
+                        prologProgramTextarea.value = storyData.programRules || ""; // Load program rules
+                        prologQueryTextarea.value = storyData.prologQuery || ""; // Load prolog query
+                        loadPrologProgram(); // Re-consult the loaded program
+                        showMessage(`Story "${file.name}" loaded successfully! (Version: ${version})`, "success");
+                    } catch (error) {
+                        showMessage("Error loading story file. Make sure it's a valid .story file.", "error");
+                        console.error("Error loading story file:", error);
+                    }
+                };
+                reader.onerror = () => {
+                    showMessage("Failed to read story file.", "error");
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        /**
+         * Loads a story from a given Gist URL.
+         * @param {string} gistUrl - The URL of the Gist.
+         */
+        async function loadStoryFromGist(gistUrl) {
+            showMessage("Loading story from Gist...", "info");
+            try {
+                const gistIdMatch = gistUrl.match(/gist\.github\.com\/[^\/]+\/([a-f0-9]+)/i);
+                if (!gistIdMatch || !gistIdMatch[1]) {
+                    showMessage("Invalid Gist URL. Please provide a valid Gist link.", "error");
+                    return;
+                }
+                const gistId = gistIdMatch[1];
+                const apiUrl = `https://api.github.com/gists/${gistId}`;
+
+                const response = await fetch(apiUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+                }
+                const gistData = await response.json();
+
+                let storyFileContent = null;
+                let storyFileName = null;
+                for (const filename in gistData.files) {
+                    // Prioritize .story files, then .json files
+                    if (filename.endsWith('.story')) {
+                        storyFileContent = gistData.files[filename].content;
+                        storyFileName = filename;
+                        break;
+                    } else if (filename.endsWith('.json') && !storyFileContent) { // Only pick .json if no .story found yet
+                        storyFileContent = gistData.files[filename].content;
+                        storyFileName = filename;
+                    }
+                }
+
+                if (storyFileContent) {
+                    const storyData = JSON.parse(storyFileContent);
+                    const version = storyData.version || "N/A";
+                    console.log(`Loaded Gist story file version: ${version}`);
+
+                    storyTitleDiv.textContent = storyData.title || "Story";
+                    storyContentDiv.innerHTML = storyData.content;
+                    prologProgramTextarea.value = storyData.programRules || "";
+                    prologQueryTextarea.value = storyData.prologQuery || "";
+                    loadPrologProgram(); // Re-consult the loaded program
+                    showMessage(`Story "${storyFileName}" loaded from Gist successfully! (Version: ${version})`, "success");
+                } else {
+                    showMessage("No .story or .json file found in the provided Gist.", "error");
+                }
+
+            } catch (error) {
+                showMessage(`Error loading Gist: ${error.message}`, "error");
+                console.error("Error loading Gist:", error);
+            }
+        }
+
+        // Event Listeners
+        loadProgramBtn.addEventListener('click', loadPrologProgram);
+        runQueryBtn.addEventListener('click', runPrologQuery);
+        toggleStoryModeBtn.addEventListener('click', toggleStoryMode);
+        storyContentDiv.addEventListener('mouseup', handleStorySelection); // For new selections
+        cancelAnnotationBtn.addEventListener('click', cancelAnnotation);
+        linkPrologBtn.addEventListener('click', linkPrologFact); // Now handles both link and save
+        removeAnnotationBtn.addEventListener('click', removeAnnotation); // New event listener for remove
+
+        // Event delegation for hover menu to appear on annotated-text spans
+        storyContentDiv.addEventListener('mouseover', handleStoryMouseOver);
+        storyContentDiv.addEventListener('mouseout', handleStoryMouseOut);
+        
+        // Event listeners for the hover menu itself
+        hoverMenu.addEventListener('mouseover', handleHoverMenuMouseOver);
+        hoverMenu.addEventListener('mouseout', handleHoverMenuMouseOut);
+
+        // Event listener for clicking annotated text (for both modes)
+        storyContentDiv.addEventListener('click', handleAnnotatedTextClick);
+
+        // Event listeners for story file operations
+        downloadStoryBtn.addEventListener('click', downloadStory);
+        loadStoryBtn.addEventListener('click', loadStory);
+        loadStoryInput.addEventListener('change', handleStoryFileSelect);
+
+        // Resizer event listeners
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            // Prevent text selection during drag
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor = 'ew-resize';
+        });
+
+        function handleMouseMove(e) {
+            if (!isResizing) return;
+
+            const containerWidth = document.querySelector('.flex-1.overflow-hidden.p-6.gap-6').offsetWidth;
+            const resizerWidth = resizer.offsetWidth;
+            const newLeftWidth = e.clientX - leftPanel.getBoundingClientRect().left;
+
+            let leftPercent = (newLeftWidth / containerWidth) * 100;
+            let rightPercent = 100 - leftPercent - (resizerWidth / containerWidth) * 100;
+
+            // Apply min/max width constraints
+            if (leftPercent < MIN_WIDTH_PERCENT) {
+                leftPercent = MIN_WIDTH_PERCENT;
+                rightPercent = 100 - MIN_WIDTH_PERCENT - (resizerWidth / containerWidth) * 100;
+            } else if (rightPercent < MIN_WIDTH_PERCENT) {
+                rightPercent = MIN_WIDTH_PERCENT;
+                leftPercent = 100 - MIN_WIDTH_PERCENT - (resizerWidth / containerWidth) * 100;
+            }
+
+            leftPanel.style.flexBasis = `${leftPercent}%`;
+            rightPanel.style.flexBasis = `${rightPercent}%`;
+        }
+
+        function handleMouseUp() {
+            isResizing = false;
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.body.style.userSelect = '';
+            document.body.style.cursor = '';
+        }
+
+
+        // Initial load of the example program and set story content when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set initial state to Creator Mode
+            storyContentDiv.contentEditable = true;
+            toggleStoryModeBtn.textContent = "Switch to Reader Mode";
+            toggleStoryModeBtn.classList.remove('bg-blue-500');
+            toggleStoryModeBtn.classList.add('bg-green-500');
+            storyContentDiv.classList.remove('bg-blue-50'); // Ensure initial background is white for Creator Mode
+            storyContentDiv.classList.add('bg-white');
+            showMessage("Switched to Creator Mode. Select text to link Prolog facts or click existing annotations to edit/remove.", "info");
+
+            // Update story content and title
+            storyContentDiv.innerHTML = initialStoryContent; // This is now ""
+            storyTitleDiv.textContent = initialStoryTitle; // This is now "Story"
+            
+            // Ensure prologQueryTextarea is blank and has the correct placeholder on load
+            prologQueryTextarea.value = "";
+            prologQueryTextarea.placeholder = "Write your Prolog query here...";
+
+            // If the initial title is "Enchanted Quill: Story & Prolog Editor", change it to "Logic Quest"
+            if (storyTitleDiv.textContent === "Enchanted Quill: Story & Prolog Editor") {
+                storyTitleDiv.textContent = "Logic Quest";
+            }
+        });
+    </script>
+</body>
+</html>
+
